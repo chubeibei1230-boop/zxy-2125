@@ -139,6 +139,8 @@ const statusOptions = [
   { label: '待准备', value: 'pending_prep' },
   { label: '进行中', value: 'in_progress' },
   { label: '待复核', value: 'pending_review' },
+  { label: '待整改', value: 'rectification_pending' },
+  { label: '已整改待复核', value: 'rectified_pending_review' },
   { label: '已完成', value: 'completed' },
   { label: '已取消', value: 'cancelled' }
 ]

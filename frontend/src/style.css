@@ -63,6 +63,16 @@ body {
   color: #67c23a;
 }
 
+.status-rectification_pending {
+  background: #fff7e6;
+  color: #fa8c16;
+}
+
+.status-rectified_pending_review {
+  background: #e6f7ff;
+  color: #1890ff;
+}
+
 .status-cancelled {
   background: #f4f4f5;
   color: #909399;

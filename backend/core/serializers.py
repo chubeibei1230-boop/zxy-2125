@@ -2,7 +2,7 @@ from rest_framework import serializers
 from .models import (
     User, Project, Station, TaskTemplate, Task,
     TaskFlowRecord, PreparationRecord, ReceptionRecord,
-    ClosingRecord, ExceptionHandling
+    ClosingRecord, ExceptionHandling, RectificationRecord
 )
 
 
@@ -104,6 +104,31 @@ class ExceptionHandlingSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'reviewer']
 
 
+class RectificationRecordSerializer(serializers.ModelSerializer):
+    stage_display = serializers.CharField(source='get_stage_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    reviewer_name = serializers.CharField(source='reviewer.username', read_only=True)
+    executor_name = serializers.CharField(source='executor.username', read_only=True)
+
+    class Meta:
+        model = RectificationRecord
+        fields = ['id', 'task', 'stage', 'stage_display', 'rectification_content', 
+                  'rectification_note', 'reviewer', 'reviewer_name', 
+                  'executor', 'executor_name', 'status', 'status_display',
+                  'created_at', 'rectified_at']
+        read_only_fields = ['id', 'created_at', 'rectified_at', 'reviewer', 'executor', 'status']
+
+
+class InitiateRectificationSerializer(serializers.Serializer):
+    stage = serializers.ChoiceField(choices=RectificationRecord.STAGE_CHOICES)
+    rectification_content = serializers.CharField()
+
+
+class SubmitRectificationSerializer(serializers.Serializer):
+    rectification_id = serializers.IntegerField()
+    rectification_note = serializers.CharField()
+
+
 class TaskTemplateDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = TaskTemplate
@@ -124,6 +149,8 @@ class TaskSerializer(serializers.ModelSerializer):
     reception = ReceptionRecordSerializer(read_only=True)
     closing = ClosingRecordSerializer(read_only=True)
     exception_handlings = ExceptionHandlingSerializer(many=True, read_only=True)
+    rectification_records = RectificationRecordSerializer(many=True, read_only=True)
+    current_rectification = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Task
@@ -132,8 +159,15 @@ class TaskSerializer(serializers.ModelSerializer):
                   'reviewer', 'reviewer_name', 'status', 'status_display',
                   'scheduled_time', 'can_hard_delete', 'flow_records',
                   'preparation', 'reception', 'closing', 'exception_handlings',
+                  'rectification_records', 'current_rectification',
                   'created_at', 'updated_at', 'is_deleted']
         read_only_fields = ['id', 'status', 'created_at', 'updated_at', 'is_deleted', 'can_hard_delete']
+
+    def get_current_rectification(self, obj):
+        current = obj.rectification_records.filter(status='pending').first()
+        if current:
+            return RectificationRecordSerializer(current).data
+        return None
 
 
 class TaskTransitionSerializer(serializers.Serializer):

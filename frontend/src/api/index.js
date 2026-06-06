@@ -102,6 +102,12 @@ export const taskApi = {
   },
   handleException(id, data) {
     return request.post(`/tasks/${id}/handle_exception/`, data)
+  },
+  initiateRectification(id, data) {
+    return request.post(`/tasks/${id}/initiate_rectification/`, data)
+  },
+  submitRectification(id, data) {
+    return request.post(`/tasks/${id}/submit_rectification/`, data)
   }
 }
 

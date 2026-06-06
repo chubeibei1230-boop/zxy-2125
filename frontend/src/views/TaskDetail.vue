@@ -76,7 +76,7 @@
             </div>
           </el-card>
 
-          <el-card v-if="task.exception_handlings && task.exception_handlings.length > 0">
+          <el-card v-if="task.exception_handlings && task.exception_handlings.length > 0" class="mb-20">
             <template #header>
               <span>异常处理记录</span>
             </template>
@@ -86,6 +86,32 @@
                 <span style="margin-left: 20px; color: #909399;">{{ formatDate(item.created_at) }}</span>
               </p>
               <pre style="white-space: pre-wrap; background: #f0f9eb; padding: 15px; border-radius: 4px; margin: 0;">{{ item.handling_content }}</pre>
+            </div>
+          </el-card>
+
+          <el-card v-if="task.rectification_records && task.rectification_records.length > 0">
+            <template #header>
+              <span>整改历史记录</span>
+            </template>
+            <div v-for="(item, index) in task.rectification_records" :key="item.id" class="rectification-item">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div>
+                  <el-tag :type="item.status === 'pending' ? 'warning' : item.status === 'rectified' ? 'primary' : 'success'" size="small">
+                    {{ item.status_display }}
+                  </el-tag>
+                  <span style="margin-left: 10px; font-weight: bold;">{{ item.stage_display }}</span>
+                </div>
+                <span style="color: #909399; font-size: 12px;">创建时间：{{ formatDate(item.created_at) }}</span>
+              </div>
+              <div style="background: #fff7e6; padding: 12px; border-radius: 4px; margin-bottom: 10px;">
+                <p style="margin-bottom: 5px;"><strong style="color: #fa8c16;">整改意见（{{ item.reviewer_name }}）：</strong></p>
+                <p style="white-space: pre-wrap; margin: 0;">{{ item.rectification_content }}</p>
+              </div>
+              <div v-if="item.rectification_note" style="background: #e6f7ff; padding: 12px; border-radius: 4px;">
+                <p style="margin-bottom: 5px;"><strong style="color: #1890ff;">整改说明（{{ item.executor_name }}）：</strong></p>
+                <p style="white-space: pre-wrap; margin: 0;">{{ item.rectification_note }}</p>
+                <p v-if="item.rectified_at" style="margin-top: 5px; color: #909399; font-size: 12px;">整改时间：{{ formatDate(item.rectified_at) }}</p>
+              </div>
             </div>
           </el-card>
         </el-col>
@@ -184,7 +210,14 @@ const statusTransitionMap = {
   ],
   'pending_review': [
     { value: 'completed', label: '复核通过（已完成）', roles: ['manager', 'reviewer'], requireRecords: true },
-    { value: 'in_progress', label: '退回执行', roles: ['manager', 'reviewer'] }
+    { value: 'rectification_pending', label: '发起整改（待整改）', roles: ['manager', 'reviewer'] }
+  ],
+  'rectification_pending': [
+    { value: 'rectified_pending_review', label: '提交整改（已整改待复核）', roles: ['manager', 'executor'] }
+  ],
+  'rectified_pending_review': [
+    { value: 'completed', label: '复核通过（已完成）', roles: ['manager', 'reviewer'], requireRecords: true },
+    { value: 'rectification_pending', label: '再次发起整改', roles: ['manager', 'reviewer'] }
   ],
   'completed': [],
   'cancelled': []
@@ -274,6 +307,18 @@ onMounted(() => {
 }
 
 .exception-item:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.rectification-item {
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.rectification-item:last-child {
   margin-bottom: 0;
   padding-bottom: 0;
   border-bottom: none;

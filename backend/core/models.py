@@ -87,6 +87,8 @@ class Task(BaseModel):
         ('pending_prep', '待准备'),
         ('in_progress', '进行中'),
         ('pending_review', '待复核'),
+        ('rectification_pending', '待整改'),
+        ('rectified_pending_review', '已整改待复核'),
         ('completed', '已完成'),
         ('cancelled', '已取消'),
     )
@@ -97,7 +99,7 @@ class Task(BaseModel):
     template = models.ForeignKey(TaskTemplate, on_delete=models.PROTECT, related_name='tasks', verbose_name='任务模板')
     executor = models.ForeignKey(User, on_delete=models.PROTECT, related_name='executed_tasks', verbose_name='执行者')
     reviewer = models.ForeignKey(User, on_delete=models.PROTECT, related_name='reviewed_tasks', verbose_name='复核者')
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending_prep', verbose_name='状态')
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='pending_prep', verbose_name='状态')
     scheduled_time = models.DateTimeField(verbose_name='计划时间')
 
     class Meta:
@@ -124,7 +126,9 @@ class Task(BaseModel):
         valid_transitions = {
             'pending_prep': ['in_progress', 'cancelled'],
             'in_progress': ['pending_review', 'cancelled'],
-            'pending_review': ['completed', 'in_progress'],
+            'pending_review': ['completed', 'rectification_pending'],
+            'rectification_pending': ['rectified_pending_review'],
+            'rectified_pending_review': ['completed', 'rectification_pending'],
             'completed': [],
             'cancelled': [],
         }
@@ -142,11 +146,19 @@ class Task(BaseModel):
             if not hasattr(self, 'closing'):
                 raise ValueError('请先填写收尾记录')
         
+        if new_status == 'rectified_pending_review':
+            latest_rectification = self.rectification_records.filter(status='pending').first()
+            if not latest_rectification:
+                raise ValueError('不存在待处理的整改记录')
+            if not latest_rectification.rectification_note:
+                raise ValueError('请填写整改说明')
+        
         if new_status == 'completed':
             if not hasattr(self, 'closing'):
                 raise ValueError('请先填写收尾记录')
             if self.closing.has_exception and not self.exception_handlings.exists():
                 raise ValueError('请先处理异常，填写异常处理意见')
+            self.rectification_records.filter(status__in=['pending', 'rectified']).update(status='closed')
         
         old_status = self.status
         self.status = new_status
@@ -164,8 +176,8 @@ class Task(BaseModel):
 
 class TaskFlowRecord(models.Model):
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='flow_records', verbose_name='任务')
-    old_status = models.CharField(max_length=20, choices=Task.STATUS_CHOICES, verbose_name='原状态')
-    new_status = models.CharField(max_length=20, choices=Task.STATUS_CHOICES, verbose_name='新状态')
+    old_status = models.CharField(max_length=30, choices=Task.STATUS_CHOICES, verbose_name='原状态')
+    new_status = models.CharField(max_length=30, choices=Task.STATUS_CHOICES, verbose_name='新状态')
     operator = models.ForeignKey(User, on_delete=models.PROTECT, verbose_name='操作人')
     remark = models.TextField(blank=True, verbose_name='备注')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='操作时间')
@@ -235,3 +247,34 @@ class ExceptionHandling(models.Model):
 
     def __str__(self):
         return f'{self.task.title} - 异常处理'
+
+
+class RectificationRecord(models.Model):
+    STAGE_CHOICES = (
+        ('preparation', '准备记录'),
+        ('reception', '接待记录'),
+        ('closing', '收尾记录'),
+    )
+    STATUS_CHOICES = (
+        ('pending', '待整改'),
+        ('rectified', '已整改'),
+        ('closed', '已闭环'),
+    )
+
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='rectification_records', verbose_name='任务')
+    stage = models.CharField(max_length=20, choices=STAGE_CHOICES, verbose_name='整改环节')
+    rectification_content = models.TextField(verbose_name='整改意见')
+    rectification_note = models.TextField(blank=True, verbose_name='整改说明')
+    reviewer = models.ForeignKey(User, on_delete=models.PROTECT, related_name='initiated_rectifications', verbose_name='复核人')
+    executor = models.ForeignKey(User, on_delete=models.PROTECT, related_name='rectifications', verbose_name='执行人')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name='整改状态')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+    rectified_at = models.DateTimeField(null=True, blank=True, verbose_name='整改时间')
+
+    class Meta:
+        verbose_name = '整改记录'
+        verbose_name_plural = verbose_name
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.task.title} - {self.get_stage_display()}整改'

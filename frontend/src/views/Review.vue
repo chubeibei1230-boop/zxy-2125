@@ -2,8 +2,10 @@
   <div class="page-container">
     <div class="page-header">
       <span class="page-title">异常复核</span>
-      <el-select v-model="filterStatus" placeholder="状态筛选" clearable style="width: 150px;" @change="loadData">
+      <el-select v-model="filterStatus" placeholder="状态筛选" clearable style="width: 180px;" @change="loadData">
         <el-option label="待复核" value="pending_review" />
+        <el-option label="已整改待复核" value="rectified_pending_review" />
+        <el-option label="待整改" value="rectification_pending" />
         <el-option label="已完成" value="completed" />
       </el-select>
     </div>
@@ -23,14 +25,14 @@
             <el-tag v-else type="success">正常</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200">
+        <el-table-column label="操作" width="250">
           <template #default="{ row }">
             <el-button link type="primary" @click="handleView(row)">查看详情</el-button>
             <el-button 
               link 
               type="success" 
               @click="handleReview(row)"
-              v-if="row.status === 'pending_review'"
+              v-if="row.status === 'pending_review' || row.status === 'rectified_pending_review'"
             >
               复核
             </el-button>
@@ -94,11 +96,32 @@
       </div>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="warning" @click="handleReject" v-if="currentTask?.status === 'pending_review'">
-          退回执行
+        <el-button type="warning" @click="openRectificationDialog" v-if="currentTask?.status === 'pending_review' || currentTask?.status === 'rectified_pending_review'">
+          发起整改
         </el-button>
-        <el-button type="primary" :loading="submitLoading" @click="handleApprove" v-if="currentTask?.status === 'pending_review'">
+        <el-button type="primary" :loading="submitLoading" @click="handleApprove" v-if="currentTask?.status === 'pending_review' || currentTask?.status === 'rectified_pending_review'">
           复核通过
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="rectificationDialogVisible" title="发起整改" width="500px" :close-on-click-modal="false">
+      <el-form :model="rectificationForm" label-width="100px">
+        <el-form-item label="整改环节">
+          <el-radio-group v-model="rectificationForm.stage">
+            <el-radio label="preparation">准备记录</el-radio>
+            <el-radio label="reception">接待记录</el-radio>
+            <el-radio label="closing">收尾记录</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="整改意见">
+          <el-input v-model="rectificationForm.rectification_content" type="textarea" :rows="4" placeholder="请输入整改意见..." />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="rectificationDialogVisible = false">取消</el-button>
+        <el-button type="warning" :loading="rectificationLoading" @click="handleInitiateRectification">
+          确认发起整改
         </el-button>
       </template>
     </el-dialog>
@@ -115,6 +138,8 @@ const router = useRouter()
 const loading = ref(false)
 const submitLoading = ref(false)
 const dialogVisible = ref(false)
+const rectificationDialogVisible = ref(false)
+const rectificationLoading = ref(false)
 const tasks = ref([])
 const currentTask = ref(null)
 const filterStatus = ref('pending_review')
@@ -122,6 +147,11 @@ const activeTab = ref('prep')
 
 const handlingForm = ref({
   handling_content: ''
+})
+
+const rectificationForm = ref({
+  stage: 'preparation',
+  rectification_content: ''
 })
 
 const loadData = async () => {
@@ -146,25 +176,34 @@ const handleReview = async (row) => {
   dialogVisible.value = true
 }
 
-const handleReject = async () => {
+const openRectificationDialog = () => {
+  rectificationForm.value = {
+    stage: 'preparation',
+    rectification_content: ''
+  }
+  rectificationDialogVisible.value = true
+}
+
+const handleInitiateRectification = async () => {
+  if (!rectificationForm.value.stage) {
+    ElMessage.warning('请选择整改环节')
+    return
+  }
+  if (!rectificationForm.value.rectification_content) {
+    ElMessage.warning('请填写整改意见')
+    return
+  }
+
   try {
-    await ElMessageBox.confirm('确定要退回执行吗？', '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
-    
-    submitLoading.value = true
-    await taskApi.transition(currentTask.value.id, {
-      new_status: 'in_progress',
-      remark: '复核不通过，退回执行'
-    })
-    ElMessage.success('已退回执行')
+    rectificationLoading.value = true
+    await taskApi.initiateRectification(currentTask.value.id, rectificationForm.value)
+    ElMessage.success('整改已发起，任务已退回执行者')
+    rectificationDialogVisible.value = false
     dialogVisible.value = false
     loadData()
-  } catch {
+  } catch (e) {
   } finally {
-    submitLoading.value = false
+    rectificationLoading.value = false
   }
 }
 

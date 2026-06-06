@@ -5,14 +5,16 @@ from django_filters.rest_framework import DjangoFilterBackend
 from .models import (
     User, Project, Station, TaskTemplate, Task,
     TaskFlowRecord, PreparationRecord, ReceptionRecord,
-    ClosingRecord, ExceptionHandling
+    ClosingRecord, ExceptionHandling, RectificationRecord
 )
 from .serializers import (
     UserSerializer, UserCreateSerializer, ProjectSerializer,
     StationSerializer, TaskTemplateSerializer, TaskSerializer,
     TaskFlowRecordSerializer, PreparationRecordSerializer,
     ReceptionRecordSerializer, ClosingRecordSerializer,
-    ExceptionHandlingSerializer, TaskTransitionSerializer
+    ExceptionHandlingSerializer, TaskTransitionSerializer,
+    InitiateRectificationSerializer, SubmitRectificationSerializer,
+    RectificationRecordSerializer
 )
 
 
@@ -114,7 +116,8 @@ class TaskViewSet(BaseModelViewSet):
     queryset = Task.objects.select_related(
         'project', 'station', 'template', 'executor', 'reviewer'
     ).prefetch_related(
-        'flow_records', 'preparation', 'reception', 'closing', 'exception_handlings'
+        'flow_records', 'preparation', 'reception', 'closing', 
+        'exception_handlings', 'rectification_records'
     ).all()
     serializer_class = TaskSerializer
     filterset_fields = ['project', 'station', 'executor', 'reviewer', 'status']
@@ -200,6 +203,70 @@ class TaskViewSet(BaseModelViewSet):
         serializer.save(task=task, reviewer=request.user)
         
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], permission_classes=[IsReviewer])
+    def initiate_rectification(self, request, pk=None):
+        task = self.get_object()
+        if task.status not in ['pending_review', 'rectified_pending_review']:
+            return Response(
+                {'detail': '当前状态不能发起整改'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = InitiateRectificationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        rectification = RectificationRecord.objects.create(
+            task=task,
+            stage=serializer.validated_data['stage'],
+            rectification_content=serializer.validated_data['rectification_content'],
+            reviewer=request.user,
+            executor=task.executor
+        )
+        
+        task.transition_to('rectification_pending', request.user, f'发起{rectification.get_stage_display()}整改')
+        
+        return Response(TaskSerializer(task).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], permission_classes=[IsExecutor])
+    def submit_rectification(self, request, pk=None):
+        task = self.get_object()
+        if task.status != 'rectification_pending':
+            return Response(
+                {'detail': '当前状态不能提交整改'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = SubmitRectificationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        rectification = RectificationRecord.objects.filter(
+            id=serializer.validated_data['rectification_id'],
+            task=task,
+            status='pending'
+        ).first()
+        
+        if not rectification:
+            return Response(
+                {'detail': '整改记录不存在或已处理'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if rectification.executor != request.user:
+            return Response(
+                {'detail': '您不是该整改的执行人'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        from django.utils import timezone
+        rectification.rectification_note = serializer.validated_data['rectification_note']
+        rectification.status = 'rectified'
+        rectification.rectified_at = timezone.now()
+        rectification.save()
+        
+        task.transition_to('rectified_pending_review', request.user, '提交整改完成，等待复核')
+        
+        return Response(TaskSerializer(task).data)
 
     @action(detail=False, methods=['get'])
     def my_tasks(self, request):
