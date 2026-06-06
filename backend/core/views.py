@@ -224,7 +224,7 @@ class TaskViewSet(BaseModelViewSet):
             executor=task.executor
         )
         
-        task.transition_to('rectification_pending', request.user, f'发起{rectification.get_stage_display()}整改')
+        task.transition_to('rectification_pending', request.user, f'发起{rectification.get_stage_display()}整改', skip_rectification_check=True)
         
         return Response(TaskSerializer(task).data, status=status.HTTP_201_CREATED)
 
@@ -264,7 +264,7 @@ class TaskViewSet(BaseModelViewSet):
         rectification.rectified_at = timezone.now()
         rectification.save()
         
-        task.transition_to('rectified_pending_review', request.user, '提交整改完成，等待复核')
+        task.transition_to('rectified_pending_review', request.user, '提交整改完成，等待复核', skip_rectification_check=True)
         
         return Response(TaskSerializer(task).data)
 
@@ -277,6 +277,10 @@ class TaskViewSet(BaseModelViewSet):
             tasks = self.get_queryset().filter(reviewer=user)
         else:
             tasks = self.get_queryset()
+        
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            tasks = tasks.filter(status=status_filter)
         
         page = self.paginate_queryset(tasks)
         if page is not None:

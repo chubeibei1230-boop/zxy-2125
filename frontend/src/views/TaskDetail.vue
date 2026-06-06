@@ -209,15 +209,11 @@ const statusTransitionMap = {
     { value: 'cancelled', label: '取消任务', roles: ['manager'] }
   ],
   'pending_review': [
-    { value: 'completed', label: '复核通过（已完成）', roles: ['manager', 'reviewer'], requireRecords: true },
-    { value: 'rectification_pending', label: '发起整改（待整改）', roles: ['manager', 'reviewer'] }
+    { value: 'completed', label: '复核通过（已完成）', roles: ['manager', 'reviewer'], requireRecords: true }
   ],
-  'rectification_pending': [
-    { value: 'rectified_pending_review', label: '提交整改（已整改待复核）', roles: ['manager', 'executor'] }
-  ],
+  'rectification_pending': [],
   'rectified_pending_review': [
-    { value: 'completed', label: '复核通过（已完成）', roles: ['manager', 'reviewer'], requireRecords: true },
-    { value: 'rectification_pending', label: '再次发起整改', roles: ['manager', 'reviewer'] }
+    { value: 'completed', label: '复核通过（已完成）', roles: ['manager', 'reviewer'], requireRecords: true }
   ],
   'completed': [],
   'cancelled': []

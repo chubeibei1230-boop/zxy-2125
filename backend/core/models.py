@@ -134,9 +134,12 @@ class Task(BaseModel):
         }
         return new_status in valid_transitions.get(self.status, [])
 
-    def transition_to(self, new_status, operator, remark=''):
+    def transition_to(self, new_status, operator, remark='', skip_rectification_check=False):
         if not self.can_transition_to(new_status):
             raise ValueError(f'无法从 {self.get_status_display()} 转换到 {new_status}')
+        
+        if new_status in ['rectification_pending', 'rectified_pending_review'] and not skip_rectification_check:
+            raise ValueError('整改状态必须通过专用接口设置，请使用整改功能')
         
         if new_status == 'pending_review':
             if not hasattr(self, 'preparation'):
@@ -145,13 +148,6 @@ class Task(BaseModel):
                 raise ValueError('请先填写接待记录')
             if not hasattr(self, 'closing'):
                 raise ValueError('请先填写收尾记录')
-        
-        if new_status == 'rectified_pending_review':
-            latest_rectification = self.rectification_records.filter(status='pending').first()
-            if not latest_rectification:
-                raise ValueError('不存在待处理的整改记录')
-            if not latest_rectification.rectification_note:
-                raise ValueError('请填写整改说明')
         
         if new_status == 'completed':
             if not hasattr(self, 'closing'):
