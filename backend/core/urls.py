@@ -9,6 +9,7 @@ router.register(r'stations', views.StationViewSet)
 router.register(r'task-templates', views.TaskTemplateViewSet)
 router.register(r'tasks', views.TaskViewSet)
 router.register(r'flow-records', views.TaskFlowRecordViewSet)
+router.register(r'task-reviews', views.TaskReviewViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),

@@ -61,6 +61,11 @@ const routes = [
         name: 'Review',
         component: () => import('@/views/Review.vue'),
         meta: { roles: ['reviewer'] }
+      },
+      {
+        path: 'reviews',
+        name: 'Reviews',
+        component: () => import('@/views/Reviews.vue')
       }
     ]
   }

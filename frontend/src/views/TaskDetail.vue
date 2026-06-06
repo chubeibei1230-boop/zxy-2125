@@ -89,7 +89,7 @@
             </div>
           </el-card>
 
-          <el-card v-if="task.rectification_records && task.rectification_records.length > 0">
+          <el-card v-if="task.rectification_records && task.rectification_records.length > 0" class="mb-20">
             <template #header>
               <span>整改历史记录</span>
             </template>
@@ -111,6 +111,75 @@
                 <p style="margin-bottom: 5px;"><strong style="color: #1890ff;">整改说明（{{ item.executor_name }}）：</strong></p>
                 <p style="white-space: pre-wrap; margin: 0;">{{ item.rectification_note }}</p>
                 <p v-if="item.rectified_at" style="margin-top: 5px; color: #909399; font-size: 12px;">整改时间：{{ formatDate(item.rectified_at) }}</p>
+              </div>
+            </div>
+          </el-card>
+
+          <el-card>
+            <template #header>
+              <div class="card-header">
+                <span>复盘记录</span>
+                <el-button 
+                  type="primary" 
+                  size="small" 
+                  v-if="task.can_initiate_review"
+                  @click="handleInitiateReview"
+                >
+                  <el-icon><Plus /></el-icon>
+                  发起复盘
+                </el-button>
+              </div>
+            </template>
+            <div v-if="!task.reviews || task.reviews.length === 0" style="text-align: center; padding: 40px 0; color: #909399;">
+              暂无复盘记录
+            </div>
+            <div v-for="(item, index) in task.reviews" :key="item.id" class="review-item">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <div>
+                  <el-tag :type="getFollowupStatusType(item.followup_status)" size="small" style="margin-right: 10px;">
+                    {{ item.followup_status_display }}
+                  </el-tag>
+                  <el-tag size="small" type="info">{{ item.problem_type_display }}</el-tag>
+                  <span style="margin-left: 10px;">责任环节：{{ item.responsibility_stage_display }}</span>
+                </div>
+                <span style="color: #909399; font-size: 12px;">
+                  发起人：{{ item.initiator_name }} | {{ formatDate(item.created_at) }}
+                </span>
+              </div>
+              <div style="background: #f0f9eb; padding: 12px; border-radius: 4px; margin-bottom: 10px;">
+                <p style="margin-bottom: 5px;"><strong style="color: #67c23a;">复盘结论：</strong></p>
+                <p style="white-space: pre-wrap; margin: 0;">{{ item.conclusion }}</p>
+              </div>
+              <div style="background: #fff7e6; padding: 12px; border-radius: 4px; margin-bottom: 10px;">
+                <p style="margin-bottom: 5px;"><strong style="color: #fa8c16;">改进建议：</strong></p>
+                <p style="white-space: pre-wrap; margin: 0;">{{ item.improvement_suggestion }}</p>
+              </div>
+              <div v-if="item.rectification_feedback" style="background: #e6f7ff; padding: 12px; border-radius: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                  <strong style="color: #1890ff;">整改反馈：</strong>
+                  <span style="color: #909399; font-size: 12px;">{{ formatDate(item.rectification_feedback_at) }}</span>
+                </div>
+                <p style="white-space: pre-wrap; margin: 0;">{{ item.rectification_feedback }}</p>
+              </div>
+              <div style="margin-top: 10px; text-align: right;">
+                <el-button 
+                  link 
+                  type="primary" 
+                  size="small" 
+                  v-if="item.can_submit_feedback && !item.rectification_feedback"
+                  @click="handleSubmitReviewFeedback(item)"
+                >
+                  提交整改反馈
+                </el-button>
+                <el-button 
+                  link 
+                  type="primary" 
+                  size="small" 
+                  v-if="item.can_edit"
+                  @click="handleUpdateReviewStatus(item)"
+                >
+                  更新跟进状态
+                </el-button>
               </div>
             </div>
           </el-card>
@@ -181,14 +250,66 @@
         </el-col>
       </el-row>
     </div>
+
+    <el-dialog v-model="reviewDialogVisible" title="发起复盘" width="600px">
+      <el-form label-width="100px">
+        <el-form-item label="复盘结论" required>
+          <el-input v-model="reviewForm.conclusion" type="textarea" :rows="3" placeholder="请输入复盘结论" />
+        </el-form-item>
+        <el-form-item label="问题类型" required>
+          <el-select v-model="reviewForm.problem_type" placeholder="请选择问题类型" style="width: 100%">
+            <el-option v-for="item in problemTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="责任环节" required>
+          <el-select v-model="reviewForm.responsibility_stage" placeholder="请选择责任环节" style="width: 100%">
+            <el-option v-for="item in responsibilityStageOptions" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="改进建议" required>
+          <el-input v-model="reviewForm.improvement_suggestion" type="textarea" :rows="3" placeholder="请输入改进建议" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="reviewDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="submitLoading" @click="handleReviewSubmit">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="feedbackDialogVisible" title="提交整改反馈" width="600px">
+      <el-form label-width="100px">
+        <el-form-item label="整改反馈">
+          <el-input v-model="feedbackForm.rectification_feedback" type="textarea" :rows="4" placeholder="请输入整改反馈内容" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="feedbackDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="submitLoading" @click="handleFeedbackSubmit">提交</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="statusDialogVisible" title="更新跟进状态" width="500px">
+      <el-form label-width="100px">
+        <el-form-item label="跟进状态">
+          <el-select v-model="statusForm.followup_status" placeholder="请选择跟进状态" style="width: 100%">
+            <el-option v-for="item in followupStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="statusDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="submitLoading" @click="handleStatusSubmit">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { taskApi } from '@/api'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus } from '@element-plus/icons-vue'
+import { taskApi, taskReviewApi } from '@/api'
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
@@ -198,6 +319,62 @@ const loading = ref(false)
 const task = ref(null)
 const newStatus = ref('')
 const transitionRemark = ref('')
+
+const reviewDialogVisible = ref(false)
+const feedbackDialogVisible = ref(false)
+const statusDialogVisible = ref(false)
+const currentReviewId = ref(null)
+const submitLoading = ref(false)
+
+const reviewForm = ref({
+  conclusion: '',
+  problem_type: '',
+  responsibility_stage: '',
+  improvement_suggestion: ''
+})
+
+const feedbackForm = ref({
+  rectification_feedback: ''
+})
+
+const statusForm = ref({
+  followup_status: ''
+})
+
+const problemTypeOptions = [
+  { label: '流程问题', value: 'process' },
+  { label: '执行问题', value: 'execution' },
+  { label: '沟通问题', value: 'communication' },
+  { label: '资源问题', value: 'resource' },
+  { label: '质量问题', value: 'quality' },
+  { label: '其他问题', value: 'other' }
+]
+
+const responsibilityStageOptions = [
+  { label: '准备环节', value: 'preparation' },
+  { label: '接待环节', value: 'reception' },
+  { label: '收尾环节', value: 'closing' },
+  { label: '复核环节', value: 'review' },
+  { label: '管理环节', value: 'management' },
+  { label: '其他环节', value: 'other' }
+]
+
+const followupStatusOptions = [
+  { label: '待处理', value: 'pending' },
+  { label: '处理中', value: 'processing' },
+  { label: '已完成', value: 'completed' },
+  { label: '已闭环', value: 'closed' }
+]
+
+const getFollowupStatusType = (status) => {
+  const typeMap = {
+    'pending': 'warning',
+    'processing': 'primary',
+    'completed': 'success',
+    'closed': 'info'
+  }
+  return typeMap[status] || 'info'
+}
 
 const statusTransitionMap = {
   'pending_prep': [
@@ -275,6 +452,83 @@ const handleTransition = async () => {
   }
 }
 
+const handleInitiateReview = () => {
+  reviewForm.value = {
+    conclusion: '',
+    problem_type: '',
+    responsibility_stage: '',
+    improvement_suggestion: ''
+  }
+  reviewDialogVisible.value = true
+}
+
+const handleReviewSubmit = async () => {
+  if (!reviewForm.value.conclusion || !reviewForm.value.problem_type || 
+      !reviewForm.value.responsibility_stage || !reviewForm.value.improvement_suggestion) {
+    ElMessage.warning('请填写所有必填项')
+    return
+  }
+  
+  submitLoading.value = true
+  try {
+    await taskReviewApi.create({
+      task: task.value.id,
+      ...reviewForm.value
+    })
+    ElMessage.success('复盘创建成功')
+    reviewDialogVisible.value = false
+    loadData()
+  } finally {
+    submitLoading.value = false
+  }
+}
+
+const handleSubmitReviewFeedback = (item) => {
+  currentReviewId.value = item.id
+  feedbackForm.value = { rectification_feedback: '' }
+  feedbackDialogVisible.value = true
+}
+
+const handleFeedbackSubmit = async () => {
+  if (!feedbackForm.value.rectification_feedback) {
+    ElMessage.warning('请输入整改反馈内容')
+    return
+  }
+  
+  submitLoading.value = true
+  try {
+    await taskReviewApi.submitFeedback(currentReviewId.value, feedbackForm.value)
+    ElMessage.success('提交成功')
+    feedbackDialogVisible.value = false
+    loadData()
+  } finally {
+    submitLoading.value = false
+  }
+}
+
+const handleUpdateReviewStatus = (item) => {
+  currentReviewId.value = item.id
+  statusForm.value = { followup_status: item.followup_status }
+  statusDialogVisible.value = true
+}
+
+const handleStatusSubmit = async () => {
+  if (!statusForm.value.followup_status) {
+    ElMessage.warning('请选择跟进状态')
+    return
+  }
+  
+  submitLoading.value = true
+  try {
+    await taskReviewApi.updateStatus(currentReviewId.value, statusForm.value)
+    ElMessage.success('更新成功')
+    statusDialogVisible.value = false
+    loadData()
+  } finally {
+    submitLoading.value = false
+  }
+}
+
 const formatDate = (dateStr) => {
   if (!dateStr) return '-'
   return new Date(dateStr).toLocaleString('zh-CN')
@@ -315,6 +569,18 @@ onMounted(() => {
 }
 
 .rectification-item:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.review-item {
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.review-item:last-child {
   margin-bottom: 0;
   padding-bottom: 0;
   border-bottom: none;

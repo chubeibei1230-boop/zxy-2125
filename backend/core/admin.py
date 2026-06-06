@@ -3,7 +3,7 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from .models import (
     User, Project, Station, TaskTemplate, Task,
     TaskFlowRecord, PreparationRecord, ReceptionRecord,
-    ClosingRecord, ExceptionHandling
+    ClosingRecord, ExceptionHandling, RectificationRecord, TaskReview
 )
 
 
@@ -77,3 +77,17 @@ class ClosingRecordAdmin(admin.ModelAdmin):
 class ExceptionHandlingAdmin(admin.ModelAdmin):
     list_display = ['task', 'reviewer', 'created_at']
     search_fields = ['task__title']
+
+
+@admin.register(RectificationRecord)
+class RectificationRecordAdmin(admin.ModelAdmin):
+    list_display = ['task', 'stage', 'status', 'reviewer', 'executor', 'created_at']
+    list_filter = ['stage', 'status']
+    search_fields = ['task__title']
+
+
+@admin.register(TaskReview)
+class TaskReviewAdmin(admin.ModelAdmin):
+    list_display = ['task', 'problem_type', 'responsibility_stage', 'followup_status', 'initiator', 'created_at']
+    list_filter = ['problem_type', 'responsibility_stage', 'followup_status']
+    search_fields = ['task__title', 'conclusion']

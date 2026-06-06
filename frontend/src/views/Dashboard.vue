@@ -2,7 +2,7 @@
   <div class="dashboard">
     <el-row :gutter="20">
       <el-col :span="6" v-for="stat in stats" :key="stat.label">
-        <el-card class="stat-card">
+        <el-card class="stat-card" :class="{ 'clickable': stat.action }" @click="stat.action && stat.action()">
           <div class="stat-content">
             <div class="stat-icon" :style="{ backgroundColor: stat.color }">
               <el-icon :size="24"><component :is="stat.icon" /></el-icon>
@@ -20,7 +20,10 @@
       <el-col :span="12">
         <el-card>
           <template #header>
-            <span>最近任务</span>
+            <div class="card-header">
+              <span>最近任务</span>
+              <el-button type="primary" link @click="$router.push('/tasks')">查看全部</el-button>
+            </div>
           </template>
           <el-table :data="recentTasks" style="width: 100%">
             <el-table-column prop="title" label="任务标题" />
@@ -38,6 +41,47 @@
         </el-card>
       </el-col>
       <el-col :span="12">
+        <el-card>
+          <template #header>
+            <div class="card-header">
+              <span>最近复盘问题</span>
+              <el-button type="primary" link @click="$router.push('/reviews')">查看全部</el-button>
+            </div>
+          </template>
+          <div v-if="!recentReviews || recentReviews.length === 0" style="text-align: center; padding: 40px 0; color: #909399;">
+            暂无复盘记录
+          </div>
+          <div v-else>
+            <div 
+              v-for="item in recentReviews" 
+              :key="item.id" 
+              class="review-item"
+              @click="$router.push(`/tasks/${item.task}`)"
+            >
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-weight: 500; color: #303133;">{{ item.task_title }}</span>
+                <el-tag :type="getFollowupStatusType(item.followup_status)" size="small">
+                  {{ item.followup_status_display }}
+                </el-tag>
+              </div>
+              <div style="display: flex; gap: 10px; margin-bottom: 8px;">
+                <el-tag size="small" type="info">{{ item.problem_type_display }}</el-tag>
+                <span style="color: #909399; font-size: 12px;">{{ item.responsibility_stage_display }}</span>
+              </div>
+              <p style="color: #606266; font-size: 13px; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                {{ item.conclusion }}
+              </p>
+              <div style="text-align: right; margin-top: 8px;">
+                <span style="color: #909399; font-size: 12px;">{{ formatDate(item.created_at) }}</span>
+              </div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <el-row :gutter="20" style="margin-top: 20px;">
+      <el-col :span="24">
         <el-card>
           <template #header>
             <span>任务状态分布</span>
@@ -63,17 +107,25 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { taskApi } from '@/api'
+import { useRouter } from 'vue-router'
+import { taskApi, taskReviewApi } from '@/api'
 import { 
   List, Clock, Check, Warning, 
-  DataAnalysis, Files, CircleCheck, Timer
+  DataAnalysis, Files, CircleCheck, Timer,
+  DocumentCopy, Bell
 } from '@element-plus/icons-vue'
 
+const router = useRouter()
 const tasks = ref([])
+const reviewStats = ref({})
+const recentReviews = ref([])
 
 const loadData = async () => {
   try {
     tasks.value = await taskApi.myTasks()
+    reviewStats.value = await taskReviewApi.stats()
+    const reviews = await taskReviewApi.myReviews()
+    recentReviews.value = Array.isArray(reviews) ? reviews.slice(0, 5) : []
   } catch (error) {
     console.error('加载数据失败', error)
   }
@@ -85,12 +137,26 @@ const stats = computed(() => {
   const inProgress = tasks.value.filter(t => t.status === 'in_progress').length
   const completed = tasks.value.filter(t => t.status === 'completed').length
   
-  return [
+  const result = [
     { label: '任务总数', value: total, icon: List, color: '#409eff' },
     { label: '待准备', value: pending, icon: Clock, color: '#e6a23c' },
     { label: '进行中', value: inProgress, icon: Timer, color: '#67c23a' },
     { label: '已完成', value: completed, icon: Check, color: '#909399' }
   ]
+  
+  if (reviewStats.value && reviewStats.value.pending !== undefined) {
+    result.push(
+      { 
+        label: '复盘待处理', 
+        value: reviewStats.value.pending_feedback || reviewStats.value.pending, 
+        icon: Bell, 
+        color: '#f56c6c',
+        action: () => router.push('/reviews')
+      }
+    )
+  }
+  
+  return result
 })
 
 const recentTasks = computed(() => {
@@ -119,6 +185,16 @@ const statusDistribution = computed(() => {
   })
 })
 
+const getFollowupStatusType = (status) => {
+  const typeMap = {
+    'pending': 'warning',
+    'processing': 'primary',
+    'completed': 'success',
+    'closed': 'info'
+  }
+  return typeMap[status] || 'info'
+}
+
 const formatDate = (dateStr) => {
   if (!dateStr) return '-'
   return new Date(dateStr).toLocaleString('zh-CN')
@@ -134,10 +210,41 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
+.stat-card.clickable {
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.stat-card.clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
 .stat-content {
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.review-item {
+  padding: 12px;
+  border-bottom: 1px solid #ebeef5;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.review-item:hover {
+  background-color: #f5f7fa;
+}
+
+.review-item:last-child {
+  border-bottom: none;
 }
 
 .stat-icon {

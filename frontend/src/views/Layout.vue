@@ -29,6 +29,10 @@
           <el-icon><List /></el-icon>
           <span>任务列表</span>
         </el-menu-item>
+        <el-menu-item index="/reviews">
+          <el-icon><DocumentCopy /></el-icon>
+          <span>复盘记录</span>
+        </el-menu-item>
         <el-menu-item v-if="userStore.isExecutor" index="/execute">
           <el-icon><Edit /></el-icon>
           <span>任务执行</span>
@@ -71,6 +75,7 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { ElMessageBox } from 'element-plus'
+import { DocumentCopy } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -85,6 +90,7 @@ const pageTitle = computed(() => {
     '/stations': '工位管理',
     '/templates': '任务模板',
     '/tasks': '任务列表',
+    '/reviews': '复盘记录',
     '/execute': '任务执行',
     '/review': '异常复核'
   }

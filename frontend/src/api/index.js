@@ -116,3 +116,36 @@ export const flowRecordApi = {
     return request.get('/flow-records/', { params })
   }
 }
+
+export const taskReviewApi = {
+  list(params) {
+    return request.get('/task-reviews/', { params })
+  },
+  myReviews(params) {
+    return request.get('/task-reviews/my_reviews/', { params })
+  },
+  detail(id) {
+    return request.get(`/task-reviews/${id}/`)
+  },
+  create(data) {
+    return request.post('/task-reviews/', data)
+  },
+  update(id, data) {
+    return request.put(`/task-reviews/${id}/`, data)
+  },
+  partialUpdate(id, data) {
+    return request.patch(`/task-reviews/${id}/`, data)
+  },
+  delete(id) {
+    return request.delete(`/task-reviews/${id}/`)
+  },
+  updateStatus(id, data) {
+    return request.post(`/task-reviews/${id}/update_status/`, data)
+  },
+  submitFeedback(id, data) {
+    return request.post(`/task-reviews/${id}/submit_feedback/`, data)
+  },
+  stats() {
+    return request.get('/task-reviews/stats/')
+  }
+}

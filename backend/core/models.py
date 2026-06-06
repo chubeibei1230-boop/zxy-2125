@@ -274,3 +274,60 @@ class RectificationRecord(models.Model):
 
     def __str__(self):
         return f'{self.task.title} - {self.get_stage_display()}整改'
+
+
+class TaskReview(models.Model):
+    PROBLEM_TYPE_CHOICES = (
+        ('process', '流程问题'),
+        ('execution', '执行问题'),
+        ('communication', '沟通问题'),
+        ('resource', '资源问题'),
+        ('quality', '质量问题'),
+        ('other', '其他问题'),
+    )
+
+    RESPONSIBILITY_STAGE_CHOICES = (
+        ('preparation', '准备环节'),
+        ('reception', '接待环节'),
+        ('closing', '收尾环节'),
+        ('review', '复核环节'),
+        ('management', '管理环节'),
+        ('other', '其他环节'),
+    )
+
+    FOLLOWUP_STATUS_CHOICES = (
+        ('pending', '待处理'),
+        ('processing', '处理中'),
+        ('completed', '已完成'),
+        ('closed', '已闭环'),
+    )
+
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='reviews', verbose_name='任务')
+    conclusion = models.TextField(verbose_name='复盘结论')
+    problem_type = models.CharField(max_length=30, choices=PROBLEM_TYPE_CHOICES, verbose_name='问题类型')
+    responsibility_stage = models.CharField(max_length=30, choices=RESPONSIBILITY_STAGE_CHOICES, verbose_name='责任环节')
+    improvement_suggestion = models.TextField(verbose_name='改进建议')
+    followup_status = models.CharField(max_length=30, choices=FOLLOWUP_STATUS_CHOICES, default='pending', verbose_name='跟进状态')
+    rectification_feedback = models.TextField(blank=True, verbose_name='整改反馈')
+    initiator = models.ForeignKey(User, on_delete=models.PROTECT, related_name='initiated_reviews', verbose_name='发起人')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
+    rectification_feedback_at = models.DateTimeField(null=True, blank=True, verbose_name='整改反馈时间')
+
+    class Meta:
+        verbose_name = '任务复盘记录'
+        verbose_name_plural = verbose_name
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.task.title} - 复盘记录'
+
+    def can_edit(self, user):
+        if user.role == 'manager':
+            return True
+        if user.role == 'reviewer' and self.initiator == user:
+            return True
+        return False
+
+    def can_submit_feedback(self, user):
+        return user.role == 'executor' and self.task.executor == user
