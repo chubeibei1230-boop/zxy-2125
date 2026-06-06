@@ -58,7 +58,7 @@
         <div v-if="activeStep === 0">
           <h4 style="margin-bottom: 15px;">模板要求：</h4>
           <div style="background: #f5f7fa; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
-            <p style="white-space: pre-wrap;">{{ currentTask.template?.preparation_content }}</p>
+            <p style="white-space: pre-wrap;">{{ currentTask.template_detail?.preparation_content }}</p>
           </div>
           <el-form :model="prepForm" label-width="80px">
             <el-form-item label="准备记录">
@@ -70,7 +70,7 @@
         <div v-if="activeStep === 1">
           <h4 style="margin-bottom: 15px;">模板要求：</h4>
           <div style="background: #f5f7fa; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
-            <p style="white-space: pre-wrap;">{{ currentTask.template?.reception_content }}</p>
+            <p style="white-space: pre-wrap;">{{ currentTask.template_detail?.reception_content }}</p>
           </div>
           <el-form :model="recepForm" label-width="80px">
             <el-form-item label="接待记录">
@@ -82,7 +82,7 @@
         <div v-if="activeStep === 2">
           <h4 style="margin-bottom: 15px;">模板要求：</h4>
           <div style="background: #f5f7fa; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
-            <p style="white-space: pre-wrap;">{{ currentTask.template?.closing_content }}</p>
+            <p style="white-space: pre-wrap;">{{ currentTask.template_detail?.closing_content }}</p>
           </div>
           <el-form :model="closeForm" label-width="80px">
             <el-form-item label="收尾记录">
@@ -150,30 +150,22 @@ const handleView = (row) => {
 }
 
 const handleExecute = async (row) => {
-  currentTask.value = { ...row }
+  currentTask.value = await taskApi.detail(row.id)
   activeStep.value = 0
   
-  if (row.preparation) {
-    prepForm.value.content = row.preparation.content
+  if (currentTask.value.preparation) {
+    prepForm.value.content = currentTask.value.preparation.content
     activeStep.value = 1
   }
-  if (row.reception) {
-    recepForm.value.content = row.reception.content
+  if (currentTask.value.reception) {
+    recepForm.value.content = currentTask.value.reception.content
     activeStep.value = 2
   }
-  if (row.closing) {
+  if (currentTask.value.closing) {
     closeForm.value = {
-      content: row.closing.content,
-      has_exception: row.closing.has_exception,
-      exception_description: row.closing.exception_description
-    }
-  }
-  
-  if (row.status === 'pending_prep') {
-    try {
-      await taskApi.transition(row.id, { new_status: 'in_progress', remark: '开始执行任务' })
-      currentTask.value.status = 'in_progress'
-    } catch (e) {
+      content: currentTask.value.closing.content,
+      has_exception: currentTask.value.closing.has_exception,
+      exception_description: currentTask.value.closing.exception_description
     }
   }
   
@@ -194,10 +186,17 @@ const submitStep = async () => {
         ElMessage.warning('请填写准备记录')
         return
       }
+      if (currentTask.value.status === 'pending_prep') {
+        await taskApi.transition(currentTask.value.id, { 
+          new_status: 'in_progress', 
+          remark: '开始执行任务' 
+        })
+      }
       if (!currentTask.value.preparation) {
         await taskApi.submitPreparation(currentTask.value.id, prepForm.value)
         ElMessage.success('准备记录提交成功')
       }
+      currentTask.value = await taskApi.detail(currentTask.value.id)
       activeStep.value = 1
     } else if (activeStep.value === 1) {
       if (!recepForm.value.content) {
@@ -208,6 +207,7 @@ const submitStep = async () => {
         await taskApi.submitReception(currentTask.value.id, recepForm.value)
         ElMessage.success('接待记录提交成功')
       }
+      currentTask.value = await taskApi.detail(currentTask.value.id)
       activeStep.value = 2
     } else if (activeStep.value === 2) {
       if (!closeForm.value.content) {

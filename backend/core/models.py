@@ -134,6 +134,20 @@ class Task(BaseModel):
         if not self.can_transition_to(new_status):
             raise ValueError(f'无法从 {self.get_status_display()} 转换到 {new_status}')
         
+        if new_status == 'pending_review':
+            if not hasattr(self, 'preparation'):
+                raise ValueError('请先填写准备记录')
+            if not hasattr(self, 'reception'):
+                raise ValueError('请先填写接待记录')
+            if not hasattr(self, 'closing'):
+                raise ValueError('请先填写收尾记录')
+        
+        if new_status == 'completed':
+            if not hasattr(self, 'closing'):
+                raise ValueError('请先填写收尾记录')
+            if self.closing.has_exception and not self.exception_handlings.exists():
+                raise ValueError('请先处理异常，填写异常处理意见')
+        
         old_status = self.status
         self.status = new_status
         self.save()

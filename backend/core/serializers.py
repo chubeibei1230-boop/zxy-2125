@@ -104,11 +104,18 @@ class ExceptionHandlingSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'reviewer']
 
 
+class TaskTemplateDetailSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TaskTemplate
+        fields = ['id', 'name', 'preparation_content', 'reception_content', 'closing_content', 'description']
+
+
 class TaskSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
     station_name = serializers.CharField(source='station.name', read_only=True)
     template_name = serializers.CharField(source='template.name', read_only=True)
+    template_detail = TaskTemplateDetailSerializer(source='template', read_only=True)
     executor_name = serializers.CharField(source='executor.username', read_only=True)
     reviewer_name = serializers.CharField(source='reviewer.username', read_only=True)
     can_hard_delete = serializers.BooleanField(read_only=True)
@@ -121,7 +128,7 @@ class TaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
         fields = ['id', 'title', 'project', 'project_name', 'station', 'station_name',
-                  'template', 'template_name', 'executor', 'executor_name',
+                  'template', 'template_name', 'template_detail', 'executor', 'executor_name',
                   'reviewer', 'reviewer_name', 'status', 'status_display',
                   'scheduled_time', 'can_hard_delete', 'flow_records',
                   'preparation', 'reception', 'closing', 'exception_handlings',

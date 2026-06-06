@@ -96,7 +96,18 @@
               <span>状态流转</span>
             </template>
             <div class="flow-actions" style="margin-bottom: 20px;">
-              <el-select v-model="newStatus" placeholder="选择目标状态" style="width: 100%; margin-bottom: 10px;">
+              <el-alert 
+                v-if="getTransitionHint" 
+                :title="getTransitionHint" 
+                type="warning" 
+                :closable="false"
+                style="margin-bottom: 10px;"
+                size="small"
+              />
+              <el-select 
+                v-model="newStatus" 
+                placeholder="选择目标状态" 
+                style="width: 100%; margin-bottom: 10px;">
                 <el-option 
                   v-for="status in availableTransitions" 
                   :key="status.value" 
@@ -108,7 +119,7 @@
               <el-button 
                 type="primary" 
                 style="width: 100%;" 
-                :disabled="!newStatus"
+                :disabled="!newStatus || getTransitionHint"
                 @click="handleTransition"
               >
                 状态流转
@@ -152,9 +163,11 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { taskApi } from '@/api'
+import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 const loading = ref(false)
 const task = ref(null)
 const newStatus = ref('')
@@ -162,16 +175,16 @@ const transitionRemark = ref('')
 
 const statusTransitionMap = {
   'pending_prep': [
-    { value: 'in_progress', label: '开始执行（进行中）' },
-    { value: 'cancelled', label: '取消任务' }
+    { value: 'in_progress', label: '开始执行（进行中）', roles: ['manager', 'executor'] },
+    { value: 'cancelled', label: '取消任务', roles: ['manager'] }
   ],
   'in_progress': [
-    { value: 'pending_review', label: '提交复核' },
-    { value: 'cancelled', label: '取消任务' }
+    { value: 'pending_review', label: '提交复核', roles: ['manager', 'executor'], requireRecords: true },
+    { value: 'cancelled', label: '取消任务', roles: ['manager'] }
   ],
   'pending_review': [
-    { value: 'completed', label: '复核通过（已完成）' },
-    { value: 'in_progress', label: '退回执行' }
+    { value: 'completed', label: '复核通过（已完成）', roles: ['manager', 'reviewer'], requireRecords: true },
+    { value: 'in_progress', label: '退回执行', roles: ['manager', 'reviewer'] }
   ],
   'completed': [],
   'cancelled': []
@@ -179,7 +192,33 @@ const statusTransitionMap = {
 
 const availableTransitions = computed(() => {
   if (!task.value) return []
-  return statusTransitionMap[task.value.status] || []
+  const allTransitions = statusTransitionMap[task.value.status] || []
+  return allTransitions.filter(t => {
+    if (t.roles && !t.roles.includes(userStore.userRole)) {
+      return false
+    }
+    return true
+  })
+})
+
+const getTransitionHint = computed(() => {
+  if (!task.value) return ''
+  const status = task.value.status
+  if (status === 'in_progress') {
+    const missing = []
+    if (!task.value.preparation) missing.push('准备记录')
+    if (!task.value.reception) missing.push('接待记录')
+    if (!task.value.closing) missing.push('收尾记录')
+    if (missing.length > 0) {
+      return `提交复核前需先填写：${missing.join('、')}`
+    }
+  }
+  if (status === 'pending_review' && task.value.closing?.has_exception) {
+    if (!task.value.exception_handlings || task.value.exception_handlings.length === 0) {
+      return '该任务存在异常，需先填写异常处理意见'
+    }
+  }
+  return ''
 })
 
 const loadData = async () => {
