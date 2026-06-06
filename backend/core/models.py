@@ -331,3 +331,29 @@ class TaskReview(models.Model):
 
     def can_submit_feedback(self, user):
         return user.role == 'executor' and self.task.executor == user
+
+
+class TaskReviewOperationLog(models.Model):
+    OPERATION_TYPE_CHOICES = (
+        ('create', '创建复盘'),
+        ('update', '编辑复盘'),
+        ('update_status', '更新跟进状态'),
+        ('submit_feedback', '提交整改反馈'),
+        ('delete', '删除复盘'),
+    )
+
+    review = models.ForeignKey(TaskReview, on_delete=models.CASCADE, related_name='operation_logs', verbose_name='复盘记录')
+    operation_type = models.CharField(max_length=30, choices=OPERATION_TYPE_CHOICES, verbose_name='操作类型')
+    operator = models.ForeignKey(User, on_delete=models.PROTECT, verbose_name='操作人')
+    old_followup_status = models.CharField(max_length=30, choices=TaskReview.FOLLOWUP_STATUS_CHOICES, null=True, blank=True, verbose_name='原跟进状态')
+    new_followup_status = models.CharField(max_length=30, choices=TaskReview.FOLLOWUP_STATUS_CHOICES, null=True, blank=True, verbose_name='新跟进状态')
+    remark = models.TextField(blank=True, verbose_name='备注')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='操作时间')
+
+    class Meta:
+        verbose_name = '复盘操作日志'
+        verbose_name_plural = verbose_name
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.review.task.title} - {self.get_operation_type_display()}'

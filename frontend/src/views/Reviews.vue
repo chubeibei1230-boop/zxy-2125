@@ -183,6 +183,25 @@
           </template>
           <div style="white-space: pre-wrap;">{{ currentReview.rectification_feedback }}</div>
         </el-card>
+
+        <el-card style="margin-top: 20px;" v-if="currentReview.operation_logs && currentReview.operation_logs.length > 0">
+          <template #header>
+            <span>操作日志</span>
+          </template>
+          <div v-for="log in currentReview.operation_logs" :key="log.id" style="margin-bottom: 12px; padding-left: 12px; border-left: 2px solid #dcdfe6;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+              <span>
+                <span style="color: #409eff; font-weight: 500;">{{ log.operator_name }}</span>
+                <span style="color: #606266; margin-left: 5px;">{{ log.operation_type_display }}</span>
+                <span v-if="log.old_followup_status && log.new_followup_status" style="color: #909399; margin-left: 5px;">
+                  ({{ log.old_followup_status_display }} → {{ log.new_followup_status_display }})
+                </span>
+              </span>
+              <span style="color: #909399; font-size: 12px;">{{ formatDate(log.created_at) }}</span>
+            </div>
+            <p v-if="log.remark" style="margin: 0; color: #909399; font-size: 12px;">{{ log.remark }}</p>
+          </div>
+        </el-card>
       </div>
     </el-drawer>
   </div>
@@ -317,9 +336,13 @@ const loadStations = async () => {
 }
 
 const loadAvailableTasks = async () => {
-  const tasks = await taskApi.list({ status: 'completed' })
-  const cancelledTasks = await taskApi.list({ status: 'cancelled' })
-  availableTasks.value = [...tasks, ...cancelledTasks]
+  let tasks = await taskApi.list({ status: 'completed' })
+  let cancelledTasks = await taskApi.list({ status: 'cancelled' })
+  let allTasks = [...tasks, ...cancelledTasks]
+  if (userStore.isReviewer) {
+    allTasks = allTasks.filter(t => t.reviewer === userStore.userInfo.id)
+  }
+  availableTasks.value = allTasks
 }
 
 const resetFilters = () => {

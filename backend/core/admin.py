@@ -3,7 +3,8 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from .models import (
     User, Project, Station, TaskTemplate, Task,
     TaskFlowRecord, PreparationRecord, ReceptionRecord,
-    ClosingRecord, ExceptionHandling, RectificationRecord, TaskReview
+    ClosingRecord, ExceptionHandling, RectificationRecord, 
+    TaskReview, TaskReviewOperationLog
 )
 
 
@@ -91,3 +92,10 @@ class TaskReviewAdmin(admin.ModelAdmin):
     list_display = ['task', 'problem_type', 'responsibility_stage', 'followup_status', 'initiator', 'created_at']
     list_filter = ['problem_type', 'responsibility_stage', 'followup_status']
     search_fields = ['task__title', 'conclusion']
+
+
+@admin.register(TaskReviewOperationLog)
+class TaskReviewOperationLogAdmin(admin.ModelAdmin):
+    list_display = ['review', 'operation_type', 'operator', 'old_followup_status', 'new_followup_status', 'created_at']
+    list_filter = ['operation_type', 'old_followup_status', 'new_followup_status']
+    search_fields = ['review__task__title', 'remark']

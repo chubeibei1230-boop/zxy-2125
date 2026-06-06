@@ -119,10 +119,16 @@ class TaskViewSet(BaseModelViewSet):
         'project', 'station', 'template', 'executor', 'reviewer'
     ).prefetch_related(
         'flow_records', 'preparation', 'reception', 'closing', 
-        'exception_handlings', 'rectification_records'
+        'exception_handlings', 'rectification_records', 'reviews',
+        'reviews__operation_logs', 'reviews__initiator'
     ).all()
     serializer_class = TaskSerializer
     filterset_fields = ['project', 'station', 'executor', 'reviewer', 'status']
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
 
     def get_permissions(self):
         if self.action in ['create', 'update', 'partial_update']:
@@ -308,7 +314,7 @@ class IsManagerOrReviewer(permissions.BasePermission):
 class TaskReviewViewSet(viewsets.ModelViewSet):
     queryset = TaskReview.objects.select_related(
         'task', 'task__project', 'task__station', 'task__executor', 'initiator'
-    ).all()
+    ).prefetch_related('operation_logs', 'operation_logs__operator').all()
     serializer_class = TaskReviewSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['task', 'problem_type', 'responsibility_stage', 'followup_status']
@@ -324,6 +330,8 @@ class TaskReviewViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if user.role == 'executor':
             queryset = queryset.filter(task__executor=user)
+        elif user.role == 'reviewer':
+            queryset = queryset.filter(initiator=user)
         project = self.request.query_params.get('project')
         if project:
             queryset = queryset.filter(task__project_id=project)
@@ -349,6 +357,11 @@ class TaskReviewViewSet(viewsets.ModelViewSet):
                 {'detail': '只能对已完成或已取消的任务发起复盘'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        if request.user.role == 'reviewer' and task.reviewer != request.user:
+            return Response(
+                {'detail': '您只能对自己作为复核者的任务发起复盘'},
+                status=status.HTTP_403_FORBIDDEN
+            )
         review = TaskReview.objects.create(
             task=task,
             conclusion=serializer.validated_data['conclusion'],
@@ -356,6 +369,13 @@ class TaskReviewViewSet(viewsets.ModelViewSet):
             responsibility_stage=serializer.validated_data['responsibility_stage'],
             improvement_suggestion=serializer.validated_data['improvement_suggestion'],
             initiator=request.user
+        )
+        TaskReviewOperationLog.objects.create(
+            review=review,
+            operation_type='create',
+            operator=request.user,
+            new_followup_status=review.followup_status,
+            remark='创建复盘记录'
         )
         return Response(TaskReviewSerializer(review, context={'request': request}).data, status=status.HTTP_201_CREATED)
 
@@ -366,7 +386,17 @@ class TaskReviewViewSet(viewsets.ModelViewSet):
                 {'detail': '您没有权限编辑此复盘记录'},
                 status=status.HTTP_403_FORBIDDEN
             )
-        return super().update(request, *args, **kwargs)
+        old_status = instance.followup_status
+        response = super().update(request, *args, **kwargs)
+        TaskReviewOperationLog.objects.create(
+            review=instance,
+            operation_type='update',
+            operator=request.user,
+            old_followup_status=old_status,
+            new_followup_status=instance.followup_status,
+            remark='编辑复盘记录'
+        )
+        return response
 
     def partial_update(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -375,7 +405,17 @@ class TaskReviewViewSet(viewsets.ModelViewSet):
                 {'detail': '您没有权限编辑此复盘记录'},
                 status=status.HTTP_403_FORBIDDEN
             )
-        return super().partial_update(request, *args, **kwargs)
+        old_status = instance.followup_status
+        response = super().partial_update(request, *args, **kwargs)
+        TaskReviewOperationLog.objects.create(
+            review=instance,
+            operation_type='update',
+            operator=request.user,
+            old_followup_status=old_status,
+            new_followup_status=instance.followup_status,
+            remark='编辑复盘记录'
+        )
+        return response
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -384,6 +424,12 @@ class TaskReviewViewSet(viewsets.ModelViewSet):
                 {'detail': '您没有权限删除此复盘记录'},
                 status=status.HTTP_403_FORBIDDEN
             )
+        TaskReviewOperationLog.objects.create(
+            review=instance,
+            operation_type='delete',
+            operator=request.user,
+            remark='删除复盘记录'
+        )
         return super().destroy(request, *args, **kwargs)
 
     @action(detail=True, methods=['post'], permission_classes=[IsManagerOrReviewer])
@@ -396,8 +442,18 @@ class TaskReviewViewSet(viewsets.ModelViewSet):
             )
         serializer = UpdateTaskReviewStatusSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        review.followup_status = serializer.validated_data['followup_status']
+        old_status = review.followup_status
+        new_status = serializer.validated_data['followup_status']
+        review.followup_status = new_status
         review.save()
+        TaskReviewOperationLog.objects.create(
+            review=review,
+            operation_type='update_status',
+            operator=request.user,
+            old_followup_status=old_status,
+            new_followup_status=new_status,
+            remark='更新跟进状态'
+        )
         return Response(TaskReviewSerializer(review, context={'request': request}).data)
 
     @action(detail=True, methods=['post'], permission_classes=[IsExecutor])
@@ -411,11 +467,20 @@ class TaskReviewViewSet(viewsets.ModelViewSet):
         serializer = SubmitRectificationFeedbackSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         from django.utils import timezone
+        old_status = review.followup_status
         review.rectification_feedback = serializer.validated_data['rectification_feedback']
         review.rectification_feedback_at = timezone.now()
         if review.followup_status == 'pending':
             review.followup_status = 'processing'
         review.save()
+        TaskReviewOperationLog.objects.create(
+            review=review,
+            operation_type='submit_feedback',
+            operator=request.user,
+            old_followup_status=old_status,
+            new_followup_status=review.followup_status,
+            remark='提交整改反馈'
+        )
         return Response(TaskReviewSerializer(review, context={'request': request}).data)
 
     @action(detail=False, methods=['get'])
@@ -448,10 +513,13 @@ class TaskReviewViewSet(viewsets.ModelViewSet):
         if user.role == 'executor':
             pending_feedback = queryset.filter(
                 task__executor=user,
+                followup_status__in=['pending', 'processing'],
                 rectification_feedback=''
             ).count()
         else:
-            pending_feedback = 0
+            pending_feedback = queryset.filter(
+                followup_status__in=['pending', 'processing']
+            ).count()
         
         return Response({
             'pending': pending_count,

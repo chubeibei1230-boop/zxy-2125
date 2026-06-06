@@ -154,12 +154,27 @@
                 <p style="margin-bottom: 5px;"><strong style="color: #fa8c16;">改进建议：</strong></p>
                 <p style="white-space: pre-wrap; margin: 0;">{{ item.improvement_suggestion }}</p>
               </div>
-              <div v-if="item.rectification_feedback" style="background: #e6f7ff; padding: 12px; border-radius: 4px;">
+              <div v-if="item.rectification_feedback" style="background: #e6f7ff; padding: 12px; border-radius: 4px; margin-bottom: 10px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
                   <strong style="color: #1890ff;">整改反馈：</strong>
                   <span style="color: #909399; font-size: 12px;">{{ formatDate(item.rectification_feedback_at) }}</span>
                 </div>
                 <p style="white-space: pre-wrap; margin: 0;">{{ item.rectification_feedback }}</p>
+              </div>
+              <div v-if="item.operation_logs && item.operation_logs.length > 0" style="background: #f5f7fa; padding: 12px; border-radius: 4px;">
+                <p style="margin-bottom: 10px; font-weight: bold; color: #606266;">操作日志：</p>
+                <div v-for="log in item.operation_logs" :key="log.id" style="margin-bottom: 8px; padding-left: 10px; border-left: 2px solid #dcdfe6;">
+                  <div style="display: flex; justify-content: space-between; font-size: 12px;">
+                    <span>
+                      <span style="color: #409eff; font-weight: 500;">{{ log.operator_name }}</span>
+                      <span style="color: #606266; margin-left: 5px;">{{ log.operation_type_display }}</span>
+                      <span v-if="log.old_followup_status && log.new_followup_status" style="color: #909399; margin-left: 5px;">
+                        ({{ log.old_followup_status_display }} → {{ log.new_followup_status_display }})
+                      </span>
+                    </span>
+                    <span style="color: #909399;">{{ formatDate(log.created_at) }}</span>
+                  </div>
+                </div>
               </div>
               <div style="margin-top: 10px; text-align: right;">
                 <el-button 

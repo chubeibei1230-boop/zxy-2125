@@ -2,7 +2,8 @@ from rest_framework import serializers
 from .models import (
     User, Project, Station, TaskTemplate, Task,
     TaskFlowRecord, PreparationRecord, ReceptionRecord,
-    ClosingRecord, ExceptionHandling, RectificationRecord, TaskReview
+    ClosingRecord, ExceptionHandling, RectificationRecord, 
+    TaskReview, TaskReviewOperationLog
 )
 
 
@@ -129,6 +130,33 @@ class SubmitRectificationSerializer(serializers.Serializer):
     rectification_note = serializers.CharField()
 
 
+class TaskReviewOperationLogSerializer(serializers.ModelSerializer):
+    operation_type_display = serializers.CharField(source='get_operation_type_display', read_only=True)
+    operator_name = serializers.CharField(source='operator.username', read_only=True)
+    old_followup_status_display = serializers.SerializerMethodField(read_only=True)
+    new_followup_status_display = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = TaskReviewOperationLog
+        fields = [
+            'id', 'operation_type', 'operation_type_display',
+            'operator', 'operator_name',
+            'old_followup_status', 'old_followup_status_display',
+            'new_followup_status', 'new_followup_status_display',
+            'remark', 'created_at'
+        ]
+
+    def get_old_followup_status_display(self, obj):
+        if obj.old_followup_status:
+            return dict(TaskReview.FOLLOWUP_STATUS_CHOICES).get(obj.old_followup_status, obj.old_followup_status)
+        return None
+
+    def get_new_followup_status_display(self, obj):
+        if obj.new_followup_status:
+            return dict(TaskReview.FOLLOWUP_STATUS_CHOICES).get(obj.new_followup_status, obj.new_followup_status)
+        return None
+
+
 class TaskReviewSerializer(serializers.ModelSerializer):
     problem_type_display = serializers.CharField(source='get_problem_type_display', read_only=True)
     responsibility_stage_display = serializers.CharField(source='get_responsibility_stage_display', read_only=True)
@@ -144,6 +172,7 @@ class TaskReviewSerializer(serializers.ModelSerializer):
     executor_name = serializers.CharField(source='task.executor.username', read_only=True)
     can_edit = serializers.SerializerMethodField(read_only=True)
     can_submit_feedback = serializers.SerializerMethodField(read_only=True)
+    operation_logs = TaskReviewOperationLogSerializer(many=True, read_only=True)
 
     class Meta:
         model = TaskReview
@@ -155,7 +184,7 @@ class TaskReviewSerializer(serializers.ModelSerializer):
             'improvement_suggestion', 'followup_status', 'followup_status_display',
             'rectification_feedback', 'initiator', 'initiator_name',
             'created_at', 'updated_at', 'rectification_feedback_at',
-            'can_edit', 'can_submit_feedback'
+            'can_edit', 'can_submit_feedback', 'operation_logs'
         ]
         read_only_fields = [
             'id', 'created_at', 'updated_at', 'rectification_feedback_at',
