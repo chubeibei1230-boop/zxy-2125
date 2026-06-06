@@ -170,6 +170,7 @@ class TaskReviewSerializer(serializers.ModelSerializer):
     station_id = serializers.IntegerField(source='task.station.id', read_only=True)
     station_name = serializers.CharField(source='task.station.name', read_only=True)
     executor_name = serializers.CharField(source='task.executor.username', read_only=True)
+    is_overdue = serializers.BooleanField(read_only=True)
     can_edit = serializers.SerializerMethodField(read_only=True)
     can_submit_feedback = serializers.SerializerMethodField(read_only=True)
     operation_logs = TaskReviewOperationLogSerializer(many=True, read_only=True)
@@ -182,6 +183,7 @@ class TaskReviewSerializer(serializers.ModelSerializer):
             'executor_name', 'conclusion', 'problem_type', 'problem_type_display',
             'responsibility_stage', 'responsibility_stage_display',
             'improvement_suggestion', 'followup_status', 'followup_status_display',
+            'followup_deadline', 'is_overdue',
             'rectification_feedback', 'initiator', 'initiator_name',
             'created_at', 'updated_at', 'rectification_feedback_at',
             'can_edit', 'can_submit_feedback', 'operation_logs'
@@ -190,7 +192,7 @@ class TaskReviewSerializer(serializers.ModelSerializer):
             'id', 'created_at', 'updated_at', 'rectification_feedback_at',
             'initiator', 'task_title', 'task_status', 'task_status_display',
             'project_id', 'project_name', 'station_id', 'station_name',
-            'executor_name', 'initiator_name'
+            'executor_name', 'initiator_name', 'is_overdue'
         ]
 
     def get_can_edit(self, obj):
@@ -211,7 +213,8 @@ class CreateTaskReviewSerializer(serializers.ModelSerializer):
         model = TaskReview
         fields = [
             'task', 'conclusion', 'problem_type',
-            'responsibility_stage', 'improvement_suggestion'
+            'responsibility_stage', 'improvement_suggestion',
+            'followup_deadline'
         ]
 
 

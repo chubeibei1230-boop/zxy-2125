@@ -37,6 +37,12 @@
             <el-option v-for="item in followupStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
         </el-form-item>
+        <el-form-item label="是否逾期">
+          <el-select v-model="filters.is_overdue" placeholder="全部" clearable style="width: 150px" @change="loadData">
+            <el-option label="已逾期" value="true" />
+            <el-option label="未逾期" value="false" />
+          </el-select>
+        </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="loadData">查询</el-button>
           <el-button @click="resetFilters">重置</el-button>
@@ -57,9 +63,23 @@
         <el-table-column prop="responsibility_stage_display" label="责任环节" width="100" />
         <el-table-column prop="followup_status_display" label="跟进状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="getFollowupStatusType(row.followup_status)" size="small">
+            <el-tag :type="getFollowupStatusType(row.followup_status, row.is_overdue)" size="small">
               {{ row.followup_status_display }}
+              <span v-if="row.is_overdue" style="margin-left: 4px;">(逾期)</span>
             </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="followup_deadline" label="跟进截止时间" width="160">
+          <template #default="{ row }">
+            <span :style="{ color: row.is_overdue ? '#f56c6c' : '' }">
+              {{ formatDate(row.followup_deadline) }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column label="是否逾期" width="80">
+          <template #default="{ row }">
+            <el-tag v-if="row.is_overdue" type="danger" size="small">已逾期</el-tag>
+            <el-tag v-else type="info" size="small">正常</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="initiator_name" label="发起人" width="100" />
@@ -112,6 +132,16 @@
         <el-form-item label="改进建议" prop="improvement_suggestion">
           <el-input v-model="form.improvement_suggestion" type="textarea" :rows="3" placeholder="请输入改进建议" />
         </el-form-item>
+        <el-form-item label="跟进截止时间" prop="followup_deadline">
+          <el-date-picker
+            v-model="form.followup_deadline"
+            type="datetime"
+            placeholder="请选择跟进截止时间"
+            style="width: 100%"
+            format="YYYY-MM-DD HH:mm:ss"
+            value-format="YYYY-MM-DD HH:mm:ss"
+          />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -156,9 +186,19 @@
           </el-descriptions-item>
           <el-descriptions-item label="责任环节">{{ currentReview.responsibility_stage_display }}</el-descriptions-item>
           <el-descriptions-item label="跟进状态">
-            <el-tag :type="getFollowupStatusType(currentReview.followup_status)" size="small">
+            <el-tag :type="getFollowupStatusType(currentReview.followup_status, currentReview.is_overdue)" size="small">
               {{ currentReview.followup_status_display }}
+              <span v-if="currentReview.is_overdue" style="margin-left: 4px;">(逾期)</span>
             </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="跟进截止时间">
+            <span :style="{ color: currentReview.is_overdue ? '#f56c6c' : '' }">
+              {{ formatDate(currentReview.followup_deadline) }}
+            </span>
+          </el-descriptions-item>
+          <el-descriptions-item label="是否逾期">
+            <el-tag v-if="currentReview.is_overdue" type="danger" size="small">已逾期</el-tag>
+            <el-tag v-else type="info" size="small">正常</el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="发起人">{{ currentReview.initiator_name }}</el-descriptions-item>
           <el-descriptions-item label="创建时间">{{ formatDate(currentReview.created_at) }}</el-descriptions-item>
@@ -238,7 +278,8 @@ const filters = ref({
   station: '',
   task_status: '',
   problem_type: '',
-  followup_status: ''
+  followup_status: '',
+  is_overdue: ''
 })
 
 const form = ref({
@@ -246,7 +287,8 @@ const form = ref({
   conclusion: '',
   problem_type: '',
   responsibility_stage: '',
-  improvement_suggestion: ''
+  improvement_suggestion: '',
+  followup_deadline: ''
 })
 
 const feedbackForm = ref({
@@ -302,7 +344,10 @@ const filteredStations = computed(() => {
   return stations.value.filter(s => s.project === filters.value.project)
 })
 
-const getFollowupStatusType = (status) => {
+const getFollowupStatusType = (status, isOverdue) => {
+  if (isOverdue) {
+    return 'danger'
+  }
   const typeMap = {
     'pending': 'warning',
     'processing': 'primary',
@@ -321,6 +366,7 @@ const loadData = async () => {
     if (filters.value.task_status) params.task_status = filters.value.task_status
     if (filters.value.problem_type) params.problem_type = filters.value.problem_type
     if (filters.value.followup_status) params.followup_status = filters.value.followup_status
+    if (filters.value.is_overdue) params.is_overdue = filters.value.is_overdue
     reviews.value = await taskReviewApi.list(params)
   } finally {
     loading.value = false
@@ -351,7 +397,8 @@ const resetFilters = () => {
     station: '',
     task_status: '',
     problem_type: '',
-    followup_status: ''
+    followup_status: '',
+    is_overdue: ''
   }
   loadData()
 }
@@ -364,7 +411,8 @@ const handleAdd = async () => {
     conclusion: '',
     problem_type: '',
     responsibility_stage: '',
-    improvement_suggestion: ''
+    improvement_suggestion: '',
+    followup_deadline: ''
   }
   dialogVisible.value = true
 }
@@ -377,7 +425,8 @@ const handleEdit = (row) => {
     conclusion: row.conclusion,
     problem_type: row.problem_type,
     responsibility_stage: row.responsibility_stage,
-    improvement_suggestion: row.improvement_suggestion
+    improvement_suggestion: row.improvement_suggestion,
+    followup_deadline: row.followup_deadline || ''
   }
   dialogVisible.value = true
 }

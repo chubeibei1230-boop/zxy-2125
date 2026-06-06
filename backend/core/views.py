@@ -341,6 +341,22 @@ class TaskReviewViewSet(viewsets.ModelViewSet):
         task_status = self.request.query_params.get('task_status')
         if task_status:
             queryset = queryset.filter(task__status=task_status)
+        is_overdue = self.request.query_params.get('is_overdue')
+        if is_overdue:
+            from django.utils import timezone
+            now = timezone.now()
+            if is_overdue == 'true':
+                queryset = queryset.filter(
+                    followup_deadline__isnull=False,
+                    followup_deadline__lt=now,
+                    followup_status__in=['pending', 'processing']
+                )
+            elif is_overdue == 'false':
+                    queryset = queryset.filter(
+                        models.Q(followup_deadline__isnull=True) | 
+                        models.Q(followup_deadline__gte=now) | 
+                        models.Q(followup_status__in=['completed', 'closed'])
+                    )
         return queryset
 
     def get_permissions(self):
@@ -368,6 +384,7 @@ class TaskReviewViewSet(viewsets.ModelViewSet):
             problem_type=serializer.validated_data['problem_type'],
             responsibility_stage=serializer.validated_data['responsibility_stage'],
             improvement_suggestion=serializer.validated_data['improvement_suggestion'],
+            followup_deadline=serializer.validated_data.get('followup_deadline'),
             initiator=request.user
         )
         TaskReviewOperationLog.objects.create(
@@ -510,6 +527,14 @@ class TaskReviewViewSet(viewsets.ModelViewSet):
         completed_count = queryset.filter(followup_status='completed').count()
         closed_count = queryset.filter(followup_status='closed').count()
         
+        from django.utils import timezone
+        now = timezone.now()
+        overdue_count = queryset.filter(
+            followup_deadline__isnull=False,
+            followup_deadline__lt=now,
+            followup_status__in=['pending', 'processing']
+        ).count()
+        
         if user.role == 'executor':
             pending_feedback = queryset.filter(
                 task__executor=user,
@@ -526,6 +551,7 @@ class TaskReviewViewSet(viewsets.ModelViewSet):
             'processing': processing_count,
             'completed': completed_count,
             'closed': closed_count,
+            'overdue': overdue_count,
             'pending_feedback': pending_feedback,
             'total': pending_count + processing_count + completed_count + closed_count
         })

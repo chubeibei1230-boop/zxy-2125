@@ -60,9 +60,12 @@
             >
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <span style="font-weight: 500; color: #303133;">{{ item.task_title }}</span>
-                <el-tag :type="getFollowupStatusType(item.followup_status)" size="small">
-                  {{ item.followup_status_display }}
-                </el-tag>
+                <div style="display: flex; gap: 4px;">
+                  <el-tag v-if="item.is_overdue" type="danger" size="small">已逾期</el-tag>
+                  <el-tag :type="getFollowupStatusType(item.followup_status, item.is_overdue)" size="small">
+                    {{ item.followup_status_display }}
+                  </el-tag>
+                </div>
               </div>
               <div style="display: flex; gap: 10px; margin-bottom: 8px;">
                 <el-tag size="small" type="info">{{ item.problem_type_display }}</el-tag>
@@ -150,10 +153,21 @@ const stats = computed(() => {
         label: '复盘待处理', 
         value: reviewStats.value.pending_feedback || reviewStats.value.pending, 
         icon: Bell, 
-        color: '#f56c6c',
+        color: '#e6a23c',
         action: () => router.push('/reviews')
       }
     )
+    if (reviewStats.value.overdue > 0) {
+      result.push(
+        { 
+          label: '复盘已逾期', 
+          value: reviewStats.value.overdue, 
+          icon: Warning, 
+          color: '#f56c6c',
+          action: () => router.push('/reviews?is_overdue=true')
+        }
+      )
+    }
   }
   
   return result
@@ -185,7 +199,10 @@ const statusDistribution = computed(() => {
   })
 })
 
-const getFollowupStatusType = (status) => {
+const getFollowupStatusType = (status, isOverdue) => {
+  if (isOverdue) {
+    return 'danger'
+  }
   const typeMap = {
     'pending': 'warning',
     'processing': 'primary',

@@ -308,6 +308,7 @@ class TaskReview(models.Model):
     responsibility_stage = models.CharField(max_length=30, choices=RESPONSIBILITY_STAGE_CHOICES, verbose_name='责任环节')
     improvement_suggestion = models.TextField(verbose_name='改进建议')
     followup_status = models.CharField(max_length=30, choices=FOLLOWUP_STATUS_CHOICES, default='pending', verbose_name='跟进状态')
+    followup_deadline = models.DateTimeField(null=True, blank=True, verbose_name='跟进截止时间')
     rectification_feedback = models.TextField(blank=True, verbose_name='整改反馈')
     initiator = models.ForeignKey(User, on_delete=models.PROTECT, related_name='initiated_reviews', verbose_name='发起人')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
@@ -321,6 +322,14 @@ class TaskReview(models.Model):
 
     def __str__(self):
         return f'{self.task.title} - 复盘记录'
+
+    @property
+    def is_overdue(self):
+        if not self.followup_deadline:
+            return False
+        if self.followup_status in ['completed', 'closed']:
+            return False
+        return timezone.now() > self.followup_deadline
 
     def can_edit(self, user):
         if user.role == 'manager':
